@@ -5,9 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Controllers/ValuesController.fs" />
+    <Compile Include="ValuesController.fs" />
     <Compile Include="Startup.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="taskBuilder.fs" Version="2.1.0" />
   </ItemGroup>
 
 </Project>
