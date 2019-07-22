@@ -1,56 +1,69 @@
 ﻿namespace BoringWebApp.Controllers
 
+open BoringWebApp
 open Microsoft.AspNetCore.Mvc
 open Microsoft.AspNetCore.Routing
-
-type ValuesRouteHelpers(linkGenerator: LinkGenerator) =
-
-    member this.IndexPath =
-        linkGenerator.GetPathByName("Values.Index", values=null)
-
-    member this.ShowPath(id: int) =
-        let values = {|Id = id|}
-        linkGenerator.GetPathByName("Values.Show", values=values)
-
-    member this.CreatePath =
-        linkGenerator.GetPathByName("Values.Create", values=null)
-
-    member this.UpdatePath(id: int) =
-        linkGenerator.GetPathByName("Values.Update", values=id)
-
-    member this.DeletePath(id: int) =
-        linkGenerator.GetPathByName("Values.Delete", values=id)
-
 
 [<CLIMutable>]
 type CreateRequest = {
     Value: string
 }
 
+type IntId = { Id: int }
+
+type ValuesRouteHelpers(linkGenerator: LinkGenerator) =
+    let byActionValues (a: string) (parameters: 'a) = linkGenerator.GetPathByAction(a, "Values", parameters)
+    let byAction (a: string) = byActionValues a null
+
+    member this.Index            = byAction "Index"
+    member this.Create           = byAction "Create"
+    member this.Show (id: int)   = byActionValues "Show" {Id=id}
+    member this.Delete (id: int) = byActionValues "Delete" {Id=id}
+    member this.Update (id: int) = byActionValues "Update" {Id=id}
+
 [<ApiController>]
-type ValuesController (routes: ValuesRouteHelpers) =
+type ValuesController (repo: ValueRepository) as this =
     inherit ControllerBase()
 
+    let ok (body: 'body) = ActionResult<'body>(body)
+    let created (id: int) (body: 'body) =
+        this.CreatedAtAction("Show", {|Id=id|}, body) |> ActionResult<'body>
+
+
     [<HttpGet("api/values/", Name="Values.Index")>]
-    member __.Index() =
-        let values = [|"value1"; "value2"|]
-        ActionResult<string[]>(values)
+    [<ProducesResponseType(200)>]
+    member __.Index() : ActionResult<BoringValue[]> =
+        repo.All() |> Seq.toArray |> ok
 
     [<HttpGet("api/values/{id}", Name="Values.Show")>]
-    member __.Show(id:int) =
-        let value = "value"
-        ActionResult<string>(value)
+    [<ProducesResponseType(200)>]
+    member __.Show(id: int) : ActionResult<BoringValue> =
+        repo.FindById id |> ok
 
     [<HttpPost("api/values/", Name="Values.Create")>]
-    member this.Create([<FromBody>] request: CreateRequest) =
-        let link = routes.ShowPath(id=123)
-        let responseBody = {| Value = "12345" |}
-        CreatedResult(location=link, value=responseBody)
+    [<ProducesResponseType(201)>]
+    member this.Create([<FromBody>] request: CreateRequest) : ActionResult<IntId> =
+        let value = repo.Insert {Id=0; Value=request.Value}
+        let responseBody = { Id = value.Id }
+        responseBody |> created value.Id
 
-    [<HttpPut("api/values/{id}", Name="Values.Update")>]
-    member __.Update(id:int, [<FromBody>] value:string) =
-        OkResult()
+    [<HttpPost("api/values/{id}", Name="Values.Update")>]
+    [<ProducesResponseType(200)>]
+    member __.Update(id:int, [<FromBody>] request: CreateRequest) : ActionResult<BoringValue> =
+        use txn = repo.BeginTransaction()
+        let original = repo.FindByIdForUpdate id
+        let updated = {original with Value=request.Value}
+        let n = repo.Update(updated)
+        txn.Commit()
+        if n = 1 then
+            updated |> ok
+        else
+            failwith "Failed to update"
 
     [<HttpDelete("api/values/{id}", Name="Values.Delete")>]
+    [<ProducesResponseType(204)>]
     member __.Delete(id:int) =
-        NoContentResult()
+        if repo.Delete(id) = 1 then
+            NoContentResult()
+        else
+            failwith "Failed to delete"

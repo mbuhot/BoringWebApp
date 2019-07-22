@@ -5,12 +5,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Db.fs" />
+    <Compile Include="BoringValue.fs" />
+    <Compile Include="ValueRepository.fs" />
     <Compile Include="ValuesController.fs" />
     <Compile Include="Startup.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Npgsql" Version="4.0.8" />
     <PackageReference Include="taskBuilder.fs" Version="2.1.0" />
   </ItemGroup>
 
