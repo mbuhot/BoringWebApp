@@ -1,8 +1,5 @@
 ﻿// Learn more about F# at http://fsharp.org
 
-open System
-open System.Data
-
 let openConnection() =
     let connection = new Npgsql.NpgsqlConnection("Host=localhost;Username=postgres;Password=password")
     connection.Open()
@@ -42,5 +39,5 @@ let main argv =
     | [|"db.drop"|] -> dropDatabase()
     | [|"db.create"|] -> createDatabase()
     | [|"db.migrate"|] -> migrateDatabase()
-    | otherwise -> printfn "I don't understand %A" argv
+    | _otherwise -> printfn "I don't understand %A" argv
     0 // return an integer exit code

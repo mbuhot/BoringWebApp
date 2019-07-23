@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Should.fs" />
+    <Compile Include="HttpClient.fs" />
+    <Compile Include="TestDbConnection.fs" />
+    <Compile Include="BoringWebAppFactory.fs" />
     <Compile Include="Tests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

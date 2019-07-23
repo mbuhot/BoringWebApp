@@ -1,11 +1,13 @@
 ﻿namespace BoringWebApp.Controllers
 
+open System.Threading.Tasks
 open BoringWebApp
 open Microsoft.AspNetCore.Mvc
 open Microsoft.AspNetCore.Routing
+open FSharp.Control.Tasks.V2
 
 [<CLIMutable>]
-type CreateRequest = {
+type ValueRequest = {
     Value: string
 }
 
@@ -27,43 +29,55 @@ type ValuesController (repo: ValueRepository) as this =
 
     let ok (body: 'body) = ActionResult<'body>(body)
     let created (id: int) (body: 'body) =
-        this.CreatedAtAction("Show", {|Id=id|}, body) |> ActionResult<'body>
+        let actionParams = {|Id=id|}
+        this.CreatedAtAction("Show", actionParams, body) |> ActionResult<'body>
 
 
     [<HttpGet("api/values/", Name="Values.Index")>]
     [<ProducesResponseType(200)>]
-    member __.Index() : ActionResult<BoringValue[]> =
-        repo.All() |> Seq.toArray |> ok
+    member __.Index() : Task<ActionResult<BoringValue[]>> =
+        task {
+            let! values = repo.All()
+            return values |> Seq.toArray |> ok
+        }
 
     [<HttpGet("api/values/{id}", Name="Values.Show")>]
     [<ProducesResponseType(200)>]
-    member __.Show(id: int) : ActionResult<BoringValue> =
-        repo.FindById id |> ok
+    member __.Show(id: int) : Task<ActionResult<BoringValue>> =
+        task {
+            let! result = repo.FindById id
+            return result |> ok
+        }
 
     [<HttpPost("api/values/", Name="Values.Create")>]
     [<ProducesResponseType(201)>]
-    member this.Create([<FromBody>] request: CreateRequest) : ActionResult<IntId> =
-        let value = repo.Insert {Id=0; Value=request.Value}
-        let responseBody = { Id = value.Id }
-        responseBody |> created value.Id
+    member this.Create([<FromBody>] request: ValueRequest) : Task<ActionResult<IntId>> =
+        task {
+            let! value = repo.Insert {Id=0; Value=request.Value}
+            let responseBody = { Id = value.Id }
+            return responseBody |> created value.Id
+        }
 
     [<HttpPost("api/values/{id}", Name="Values.Update")>]
     [<ProducesResponseType(200)>]
-    member __.Update(id:int, [<FromBody>] request: CreateRequest) : ActionResult<BoringValue> =
-        use txn = repo.BeginTransaction()
-        let original = repo.FindByIdForUpdate id
-        let updated = {original with Value=request.Value}
-        let n = repo.Update(updated)
-        txn.Commit()
-        if n = 1 then
-            updated |> ok
-        else
-            failwith "Failed to update"
+    member __.Update(id:int, [<FromBody>] request: ValueRequest) : Task<ActionResult<BoringValue>> =
+        task {
+            use! txn = repo.BeginTransaction()
+            let! original = repo.FindByIdForUpdate id
+            let updated = {original with Value=request.Value}
+            let! n = repo.Update(updated)
+            do! txn.CommitAsync()
+            return if n = 1 then updated |> ok
+                            else failwith "Failed to update"
+        }
 
     [<HttpDelete("api/values/{id}", Name="Values.Delete")>]
     [<ProducesResponseType(204)>]
     member __.Delete(id:int) =
-        if repo.Delete(id) = 1 then
-            NoContentResult()
-        else
-            failwith "Failed to delete"
+        task {
+            let! n = repo.Delete(id)
+            if n = 1 then
+                return NoContentResult()
+            else
+                return failwith "Failed to delete"
+        }
