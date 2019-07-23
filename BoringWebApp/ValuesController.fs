@@ -7,11 +7,16 @@ open Microsoft.AspNetCore.Routing
 open FSharp.Control.Tasks.V2
 
 [<CLIMutable>]
-type ValueRequest = {
-    Value: string
-}
+type ValueRequest =
+    {
+        Value: string
+    }
 
-type IntId = { Id: int }
+[<CLIMutable>]
+type IntId =
+    {
+        Id: int
+    }
 
 type ValuesRouteHelpers(linkGenerator: LinkGenerator) =
     let byActionValues (a: string) (parameters: 'a) = linkGenerator.GetPathByAction(a, "Values", parameters)
@@ -67,17 +72,16 @@ type ValuesController (repo: ValueRepository) as this =
             let updated = {original with Value=request.Value}
             let! n = repo.Update(updated)
             do! txn.CommitAsync()
-            return if n = 1 then updated |> ok
-                            else failwith "Failed to update"
+            match n with
+            | 1 -> return updated |> ok
+            | _ -> return failwith "Failed to delete"
         }
 
     [<HttpDelete("api/values/{id}", Name="Values.Delete")>]
     [<ProducesResponseType(204)>]
     member __.Delete(id:int) =
         task {
-            let! n = repo.Delete(id)
-            if n = 1 then
-                return NoContentResult()
-            else
-                return failwith "Failed to delete"
+            match! repo.Delete(id) with
+            | 1 -> return NoContentResult() :> ActionResult
+            | _ -> return NotFoundResult() :> ActionResult
         }

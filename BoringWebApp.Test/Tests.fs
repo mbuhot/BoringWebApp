@@ -35,13 +35,13 @@ type ValuesTest() =
 
     [<Fact>]
     member this.``Create persists a single Value``() = task {
-        let! (response: BoringValue) = client |> HttpClient.postJsonAsync routes.Create { Value = "Hello" }
+        let! (response: IntId) = client |> HttpClient.postJsonAsync routes.Create { Value = "Hello" }
         response.Id |> Should.beGreaterThan 0
     }
 
     [<Fact>]
     member this.``Update modified a single Value``() = task {
-        let! (response: BoringValue) = client |> HttpClient.postJsonAsync routes.Create { Value = "Hello" }
+        let! (response: IntId) = client |> HttpClient.postJsonAsync routes.Create { Value = "Hello" }
         let! (response: BoringValue) = client |> HttpClient.postJsonAsync (routes.Update response.Id) { Value = "Hello2" }
         response.Id |> Should.beGreaterThan 0
     }
