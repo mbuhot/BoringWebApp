@@ -6,11 +6,10 @@ open Microsoft.Extensions.DependencyInjection
 
 open Xunit
 
-open BoringWebApp
-open BoringWebApp.Controllers
+open BoringWebApp.Values
 
 
-type ValuesTest() =
+type ValuesTests() =
     static let factory = new BoringWebApplicationFactory()
     let txn = factory.DbConnection.BeginTransaction()
     let routes = factory.Services.GetRequiredService<ValuesRouteHelpers>()
@@ -45,4 +44,3 @@ type ValuesTest() =
         let! (response: BoringValue) = client |> HttpClient.postJsonAsync (routes.Update response.Id) { Value = "Hello2" }
         response.Id |> Should.beGreaterThan 0
     }
-

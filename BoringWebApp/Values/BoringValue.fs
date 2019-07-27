@@ -1,4 +1,4 @@
-namespace BoringWebApp
+namespace BoringWebApp.Values
 
 [<CLIMutable>]
 type BoringValue =

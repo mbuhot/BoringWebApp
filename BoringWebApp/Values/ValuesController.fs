@@ -1,7 +1,6 @@
-﻿namespace BoringWebApp.Controllers
+﻿namespace BoringWebApp.Values
 
 open System.Threading.Tasks
-open BoringWebApp
 open Microsoft.AspNetCore.Mvc
 open Microsoft.AspNetCore.Routing
 open FSharp.Control.Tasks.V2
@@ -69,7 +68,7 @@ type ValuesController (repo: ValueRepository) as this =
         task {
             use! txn = repo.BeginTransaction()
             let! original = repo.FindByIdForUpdate id
-            let updated = {original with Value=request.Value}
+            let updated = {original with Value = request.Value} |> ValuesService.capitalizeValue
             let! n = repo.Update(updated)
             do! txn.CommitAsync()
             match n with

@@ -1,7 +1,9 @@
-namespace BoringWebApp
+namespace BoringWebApp.Values
+
 open System.Data
 open System.Data.Common
 open System.Threading.Tasks
+open BoringWebApp
 open BoringWebApp.DataRecordHelpers
 
 type ValueRepository(db: DbConnection) =

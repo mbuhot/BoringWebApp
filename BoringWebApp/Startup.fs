@@ -1,6 +1,6 @@
 namespace BoringWebApp
 
-open System.Data
+open System.Data.Common
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 //open Microsoft.AspNetCore.HttpsPolicy;
@@ -9,26 +9,25 @@ open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 
-open BoringWebApp.Controllers
+open BoringWebApp.Values
+open BoringWebApp.Orders
 
-type Startup (configuration: IConfiguration)=
-    let addScopedDbConnection (services: IServiceCollection) =
-        services.AddScoped<IDbConnection>(fun _serviceProvider ->
-            let connection = new Npgsql.NpgsqlConnection(configuration.GetConnectionString("db"))
-            connection.Open()
-            connection :> IDbConnection
-        ) |> ignore
 
+type Startup (configuration: IConfiguration) =
     member this.Configuration = configuration
 
     // This method gets called by the runtime. Use this method to add services to the container.
     member this.ConfigureServices(services: IServiceCollection) =
         // Add framework services.
-        services |> addScopedDbConnection
-        ignore <| services.AddTransient<ValueRepository>()
-        ignore <| services.AddTransient<ValuesRouteHelpers>()
-        ignore <| services.AddAuthorization()
-        ignore <| services.AddControllers()
+        services
+            .AddScoped<DbConnection>(fun _ -> Db.createConnection configuration)
+            .AddTransient<ValueRepository>()
+            .AddTransient<OrderRepository>()
+            .AddTransient<ValuesRouteHelpers>()
+            .AddTransient<OrdersRouteHelpers>()
+            .AddAuthorization()
+            .AddControllers()
+        |> ignore
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
     member this.Configure(app: IApplicationBuilder, env: IWebHostEnvironment) =
