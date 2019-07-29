@@ -1,15 +1,50 @@
 namespace BoringWebApp.Orders
 open Microsoft.AspNetCore.Mvc
 open System
+open System.ComponentModel.DataAnnotations
 
+/// <summary>
+/// An Order
+/// </summary>
 [<CLIMutable>]
 type OrderResponse =
     {
+        /// <summary>
+        /// The unique identifier
+        /// </summary>
+        [<Required>]
         OrderId: int
+
+        /// <summary>
+        /// The instant the order was created
+        /// </summary>
+        [<Required>]
         CreatedAt: DateTime
+
+        /// <summary>
+        /// The unique ID of the customer that created the Order
+        /// </summary>
+        [<Required>]
+        [<MaxLength(255)>]
         Customer: string
+
+        /// <summary>
+        /// An optional discount code to apply to the Order
+        /// </summary>
+        [<MaxLength(255)>]
         DiscountCode: string
+
+        /// <summary>
+        /// The order status, one of "NEW", "Complete"
+        /// </summary>
+        [<Required>]
+        [<MaxLength(32)>]
         Status: string
+
+        /// <summary>
+        /// The individual product items in the Order
+        /// </summary>
+        [<Required>]
         OrderItems: OrderItemResponse[]
     }
 
