@@ -5,10 +5,13 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 //open Microsoft.AspNetCore.HttpsPolicy;
 //open Microsoft.AspNetCore.Mvc
+open Microsoft.OpenApi.Models
+open Swashbuckle.AspNetCore.Swagger
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 
+open System.IO
 open BoringWebApp.Values
 open BoringWebApp.Orders
 
@@ -29,15 +32,29 @@ type Startup (configuration: IConfiguration) =
             .AddControllers()
         |> ignore
 
+        services
+            .AddSwaggerGen(fun c ->
+                c.SwaggerDoc("v1", new OpenApiInfo(Title = "Boring Web App", Version = "v1"))
+                let filePath = Path.Combine(System.AppContext.BaseDirectory, "BoringWebApp.xml")
+                c.IncludeXmlComments(filePath)
+            )
+        |> ignore
+
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
     member this.Configure(app: IApplicationBuilder, env: IWebHostEnvironment) =
         if (env.IsDevelopment()) then
-            ignore <| app.UseDeveloperExceptionPage()
+            app.UseDeveloperExceptionPage() |> ignore
         else
-            ignore <| app.UseHsts()
+            app.UseHsts() |> ignore
 
-        ignore <| app.UseHttpsRedirection()
-        ignore <| app.UseRouting()
-        ignore <| app.UseAuthorization()
-        ignore <| app.UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
+        app
+            .UseHttpsRedirection()
+            .UseRouting()
+            .UseAuthorization()
+            .UseSwagger()
+            .UseSwaggerUI(fun x ->
+                x.SwaggerEndpoint("/swagger/v1/swagger.json", "Boring Web App V1")
+            )
+            .UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
+        |> ignore
 

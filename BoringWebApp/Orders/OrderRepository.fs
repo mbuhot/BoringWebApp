@@ -89,25 +89,25 @@ type OrderRepository(db: DbConnection) =
     // Queries
 
     member this.AllOrders() : Order list Task =
-        Queries.allOrders db
+        db |> Queries.allOrders
 
     member this.FindOrderById(orderId: int) : Order Task =
-        Queries.findOrderById orderId db
+        db |> Queries.findOrderById orderId
 
     member this.FindOrderItemById (orderItemId: int) : OrderItem Task =
-        Queries.findOrderItemById orderItemId db
+        db |> Queries.findOrderItemById orderItemId
 
 
     // Relations
 
     member this.IncludeItems(orders: Order list) : Order list Task =
-        Relations.includeItemsForOrders orders db
+        db |> Relations.includeItemsForOrders orders
 
     member this.IncludeItems(order: Order): Order Task =
-        Relations.includeItemsForOrder order db
+        db |> Relations.includeItemsForOrder order
 
     member this.IncludeOrder (orderItem: OrderItem): OrderItem Task =
-        Relations.includeOrder orderItem db
+        db |> Relations.includeOrder orderItem
 
 
     // Mutations

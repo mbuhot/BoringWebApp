@@ -4,6 +4,14 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
 
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DocumentationFile>bin\Debug\BoringWebApp.xml</DocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DocumentationFile>bin\Release\BoringWebApp.xml</DocumentationFile>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Task.fs" />
     <Compile Include="Db.fs" />
@@ -11,6 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="4.0.8" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="5.0.0-rc2" />
     <PackageReference Include="taskBuilder.fs" Version="2.1.0" />
   </ItemGroup>
 
