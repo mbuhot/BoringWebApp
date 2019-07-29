@@ -4,12 +4,10 @@ open System.Data.Common
 open System.Threading.Tasks
 open FSharp.Control.Tasks.V2
 open BoringWebApp
-open DataRecordHelpers
+open BoringWebApp.DataRecordHelpers
 
-type OrderRepository(db: DbConnection) =
-    ////
-    // Record bindings
-
+/// Defines the conversions between IDataRecord and Order domain types
+module private Bindings =
     let recordToOrder (r: IDataRecord) : Order =
         {
             OrderId = r?order_id
@@ -30,30 +28,28 @@ type OrderRepository(db: DbConnection) =
             Order = order
         }
 
-    ////
-    // Queries
 
-    member this.AllOrders() : Order list Task =
-        Db.query "SELECT * FROM orders" [] recordToOrder db
+/// Defines the DB queries for loading Order Domain types by ids or other attributes
+module private Queries =
 
-    member this.FindOrderById(orderId: int) : Order Task =
+    let allOrders (db: DbConnection) : Order list Task =
+        Db.query "SELECT * FROM orders" [] Bindings.recordToOrder db
+
+    let findOrderById (orderId: int) (db: DbConnection) : Order Task =
         Db.queryOne
             "SELECT * FROM orders WHERE order_id = @OrderId"
             (Db.parameters {|OrderId = orderId|})
-            recordToOrder
+            Bindings.recordToOrder
             db
 
-    member this.FindOrderItemById (orderItemId: int) : OrderItem Task =
+    let findOrderItemById (orderItemId: int) (db: DbConnection) : OrderItem Task =
         Db.queryOne
             "SELECT * FROM order_items WHERE order_item_id = @OrderItemId"
             (Db.parameters {|OrderItemId = orderItemId|})
-            (recordToOrderItem None)
+            (Bindings.recordToOrderItem None)
             db
 
-    ////
-    // Relationships
-
-    member private this.LoadItemsForOrders (orderIds: int[]): OrderItem list Task =
+    let findItemsForOrderIds (orderIds: int[]) (db: DbConnection): OrderItem list Task =
         Db.query
             """
             SELECT *
@@ -62,12 +58,15 @@ type OrderRepository(db: DbConnection) =
             ORDER BY order_id asc, order_item_id asc
             """
             (Db.parameters {|OrderIds = orderIds|})
-            (recordToOrderItem None)
+            (Bindings.recordToOrderItem None)
             db
 
-    member this.IncludeItems(orders: Order list) : Order list Task =
+
+/// Defines functions to load related data and attach to Order domain types
+module private Relations =
+    let includeItemsForOrders(orders: Order list) (db: DbConnection) : Order list Task =
         task {
-            let! items = this.LoadItemsForOrders [|for o in orders -> o.OrderId|]
+            let! items = Queries.findItemsForOrderIds [|for o in orders -> o.OrderId|] db
             return
                 query {
                     for o in orders do
@@ -76,14 +75,41 @@ type OrderRepository(db: DbConnection) =
                 } |> List.ofSeq
         }
 
-    member this.IncludeItems(order: Order): Order Task =
-        this.IncludeItems [order] |> Task.map (List.exactlyOne)
+    let includeItemsForOrder(order: Order) (db: DbConnection): Order Task =
+        includeItemsForOrders [order] db |> Task.map (List.exactlyOne)
 
-    member this.IncludeOrder (orderItem: OrderItem): OrderItem Task =
-        this.FindOrderById(orderItem.OrderId)
+    let includeOrder (orderItem: OrderItem) (db: DbConnection): OrderItem Task =
+        Queries.findOrderById orderItem.OrderId db
         |> Task.map (fun x -> {orderItem with Order = Some x})
 
-    ////
+
+/// Exposes a facade that can be injected into a Controller
+type OrderRepository(db: DbConnection) =
+
+    // Queries
+
+    member this.AllOrders() : Order list Task =
+        Queries.allOrders db
+
+    member this.FindOrderById(orderId: int) : Order Task =
+        Queries.findOrderById orderId db
+
+    member this.FindOrderItemById (orderItemId: int) : OrderItem Task =
+        Queries.findOrderItemById orderItemId db
+
+
+    // Relations
+
+    member this.IncludeItems(orders: Order list) : Order list Task =
+        Relations.includeItemsForOrders orders db
+
+    member this.IncludeItems(order: Order): Order Task =
+        Relations.includeItemsForOrder order db
+
+    member this.IncludeOrder (orderItem: OrderItem): OrderItem Task =
+        Relations.includeOrder orderItem db
+
+
     // Mutations
 
     member this.Insert(event: OrderCreated) : int Task =
