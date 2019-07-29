@@ -28,7 +28,8 @@ type OrdersController (repo: OrderRepository) =
     [<HttpGet("api/orders/", Name="Orders.Index")>]
     [<ProducesResponseType(200)>]
     member __.Index() : Task<ActionResult<OrderResponse[]>> =
-        repo.AllOrdersWithItems()
+        repo.AllOrders()
+        |> Task.bind repo.IncludeItems
         |> Task.map OrdersView.index
 
     [<HttpGet("api/orders/{orderId}", Name="Orders.Show")>]
@@ -36,7 +37,7 @@ type OrdersController (repo: OrderRepository) =
     member __.Show(orderId: int) : Task<ActionResult<OrderResponse>> =
         orderId
         |> repo.FindOrderById
-        |> Task.bind repo.LoadItems
+        |> Task.bind repo.IncludeItems
         |> Task.map OrdersView.show
 
     [<HttpPost("api/orders/", Name="Orders.Create")>]
@@ -51,7 +52,7 @@ type OrdersController (repo: OrderRepository) =
     member this.AddItem(request: AddItemRequest) : Task<ActionResult<CreateResponse>> =
         request.OrderId
         |> repo.FindOrderById
-        |> Task.bind repo.LoadItems
+        |> Task.bind repo.IncludeItems
         |> Task.map (OrderService.addItem request.Product request.Quantity 13.0M)
         |> Task.bind repo.AddItem
         |> Task.map OrdersView.itemAdded
@@ -60,8 +61,11 @@ type OrdersController (repo: OrderRepository) =
     [<ProducesResponseType(204)>]
     member __.RemoveItem(orderId: int, orderItemId: int) =
         task {
-            let! item = repo.LoadItemWithOrder orderId orderItemId
-            let event = OrderService.removeItem item
-            do! repo.DeleteItem event
-            return NoContentResult()
+            let! item = repo.FindOrderItemById orderItemId
+            if item.OrderId = orderId then
+                let event = OrderService.removeItem item
+                do! repo.DeleteItem event
+                return NoContentResult() :> ActionResult
+            else
+                return NotFoundResult() :> ActionResult
         }

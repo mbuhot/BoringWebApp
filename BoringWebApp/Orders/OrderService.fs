@@ -3,15 +3,11 @@ open System
 
 let createOrder (customer: string) (now: DateTime) : OrderCreated =
     let event: OrderCreated = {
-            Order = {
-                OrderId = 0
-                CreatedAt = now
-                Customer = customer
-                DiscountCode = None
-                Status = "New"
-                OrderItems = None
-            }
-        }
+        CreatedAt = now
+        Customer = customer
+        DiscountCode = None
+        Status = "New"
+    }
     event
 
 let addItem (product: string) (quantity: int) (price: decimal) (order: Order) : ItemAdded =
