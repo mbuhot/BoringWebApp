@@ -2,9 +2,7 @@
 module BoringWebApp.Test.HttpClient
 
 open System.Net.Http
-open System.Text.Json
 open System.Threading.Tasks
-open FSharp.Control.Tasks.V2
 open Microsoft.AspNetCore.Components
 
 

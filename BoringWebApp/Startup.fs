@@ -6,7 +6,6 @@ open Microsoft.AspNetCore.Hosting
 //open Microsoft.AspNetCore.HttpsPolicy;
 //open Microsoft.AspNetCore.Mvc
 open Microsoft.OpenApi.Models
-open Swashbuckle.AspNetCore.Swagger
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting

@@ -1,5 +1,4 @@
 namespace BoringWebApp.Test
-open System.Data
 open System.Data.Common
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Mvc.Testing

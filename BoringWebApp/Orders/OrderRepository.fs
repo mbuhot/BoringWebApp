@@ -2,9 +2,8 @@ namespace BoringWebApp.Orders
 open System.Data
 open System.Data.Common
 open System.Threading.Tasks
-open FSharp.Control.Tasks.V2
 open BoringWebApp
-open BoringWebApp.DataRecordHelpers
+open BoringWebApp.Db.Operators
 
 /// Defines the conversions between IDataRecord and Order domain types
 module private Bindings =
@@ -18,20 +17,19 @@ module private Bindings =
             OrderItems = None
         }
 
-    let recordToOrderItem (order: Order option) (r: IDataRecord) : OrderItem =
+    let recordToOrderItem (r: IDataRecord) : OrderItem =
         {
             OrderItemId = r?order_item_id
             OrderId = r?order_id
             Product = r?product
             UnitPrice = r?unit_price
             Quantity = r?quantity
-            Order = order
+            Order = None
         }
 
 
 /// Defines the DB queries for loading Order Domain types by ids or other attributes
 module private Queries =
-
     let allOrders (db: DbConnection) : Order list Task =
         Db.query "SELECT * FROM orders" [] Bindings.recordToOrder db
 
@@ -46,7 +44,7 @@ module private Queries =
         Db.queryOne
             "SELECT * FROM order_items WHERE order_item_id = @OrderItemId"
             (Db.parameters {|OrderItemId = orderItemId|})
-            (Bindings.recordToOrderItem None)
+            Bindings.recordToOrderItem
             db
 
     let findItemsForOrderIds (orderIds: int[]) (db: DbConnection): OrderItem list Task =
@@ -58,22 +56,23 @@ module private Queries =
             ORDER BY order_id asc, order_item_id asc
             """
             (Db.parameters {|OrderIds = orderIds|})
-            (Bindings.recordToOrderItem None)
+            Bindings.recordToOrderItem
             db
 
 
 /// Defines functions to load related data and attach to Order domain types
 module private Relations =
     let includeItemsForOrders(orders: Order list) (db: DbConnection) : Order list Task =
-        task {
-            let! items = Queries.findItemsForOrderIds [|for o in orders -> o.OrderId|] db
-            return
-                query {
-                    for o in orders do
-                    groupJoin i in items on (o.OrderId = i.OrderId) into orderItems
-                    select {o with OrderItems = orderItems |> List.ofSeq |> Some}
-                } |> List.ofSeq
-        }
+        let combineItemsWithOrders (items: OrderItem list) =
+            query {
+                for o in orders do
+                groupJoin i in items on (o.OrderId = i.OrderId) into orderItems
+                select {o with OrderItems = orderItems |> List.ofSeq |> Some}
+            } |> List.ofSeq
+
+        db
+        |> Queries.findItemsForOrderIds [|for o in orders -> o.OrderId|]
+        |> Task.map combineItemsWithOrders
 
     let includeItemsForOrder(order: Order) (db: DbConnection): Order Task =
         includeItemsForOrders [order] db |> Task.map (List.exactlyOne)
@@ -88,10 +87,10 @@ type OrderRepository(db: DbConnection) =
 
     // Queries
 
-    member this.AllOrders() : Order list Task =
+    member this.AllOrders () : Order list Task =
         db |> Queries.allOrders
 
-    member this.FindOrderById(orderId: int) : Order Task =
+    member this.FindOrderById (orderId: int) : Order Task =
         db |> Queries.findOrderById orderId
 
     member this.FindOrderItemById (orderItemId: int) : OrderItem Task =
@@ -100,10 +99,10 @@ type OrderRepository(db: DbConnection) =
 
     // Relations
 
-    member this.IncludeItems(orders: Order list) : Order list Task =
+    member this.IncludeItems (orders: Order list) : Order list Task =
         db |> Relations.includeItemsForOrders orders
 
-    member this.IncludeItems(order: Order): Order Task =
+    member this.IncludeItems (order: Order): Order Task =
         db |> Relations.includeItemsForOrder order
 
     member this.IncludeOrder (orderItem: OrderItem): OrderItem Task =
@@ -112,17 +111,17 @@ type OrderRepository(db: DbConnection) =
 
     // Mutations
 
-    member this.Insert(event: OrderCreated) : int Task =
+    member this.Insert (event: OrderCreated) : int Task =
         db |> Db.insert event (fun r -> r?order_id)
 
-    member this.AddItem(event: ItemAdded) : int Task =
+    member this.AddItem (event: ItemAdded) : int Task =
         db |> Db.insert event (fun r -> r?order_item_id)
 
-    member this.UpdateQuantity(event: ItemQuantityChanged) =
+    member this.UpdateQuantity (event: ItemQuantityChanged) =
         db |> Db.updateByPrimaryKey event
 
-    member this.UpdateStatus(event: OrderSubmitted) =
+    member this.UpdateStatus (event: OrderSubmitted) =
         db |> Db.updateByPrimaryKey event
 
-    member this.DeleteItem(event: ItemRemoved) =
+    member this.DeleteItem (event: ItemRemoved) =
         db |> Db.deleteByPrimaryKey event

@@ -10,7 +10,7 @@ open BoringWebApp.Orders
 open Xunit.Abstractions
 
 
-type OrdersTests(output: ITestOutputHelper) =
+type OrdersTests(_output: ITestOutputHelper) =
     static let factory = new BoringWebApplicationFactory()
     let txn = factory.DbConnection.BeginTransaction()
     let routes = factory.Services.GetRequiredService<OrdersRouteHelpers>()
