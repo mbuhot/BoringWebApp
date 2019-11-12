@@ -3,17 +3,28 @@ module BoringWebApp.Test.HttpClient
 
 open System.Net.Http
 open System.Threading.Tasks
-open Microsoft.AspNetCore.Components
+
+open BoringWebApp
 
 
 let postJsonAsync (path: string) (body: 'a) (client: HttpClient): Task<'b> =
-    client.PostJsonAsync<'b>(path, body)
+    use body = new StringContent(System.Text.Json.JsonSerializer.Serialize body)
+    body.Headers.ContentType.MediaType <- "application/json"
+    client.PostAsync(path, body)
+    |> Task.bind (fun x -> x.Content.ReadAsStringAsync())
+    |> Task.map (fun x -> System.Text.Json.JsonSerializer.Deserialize x)
 
 let putJsonAsync (path: string) (body: 'a) (client: HttpClient): Task<'b> =
-    client.PutJsonAsync<'b>(path, body)
+    use body = new StringContent(System.Text.Json.JsonSerializer.Serialize body)
+    body.Headers.ContentType.MediaType <- "application/json"
+    client.PutAsync(path, body)
+    |> Task.bind (fun x -> x.Content.ReadAsStringAsync())
+    |> Task.map (fun x -> System.Text.Json.JsonSerializer.Deserialize x)
 
 let getJsonAsync (path: string) (client: HttpClient): Task<'a> =
-    client.GetJsonAsync<'a> path
+    client.GetAsync(path)
+    |> Task.bind (fun x -> x.Content.ReadAsStringAsync())
+    |> Task.map (fun x -> System.Text.Json.JsonSerializer.Deserialize x)
 
 let getStringAsync (path: string) (client: HttpClient): Task<string> =
     client.GetStringAsync(path)

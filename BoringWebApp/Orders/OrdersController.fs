@@ -3,7 +3,6 @@ namespace BoringWebApp.Orders
 open System
 open System.Threading.Tasks
 open Microsoft.AspNetCore.Mvc
-open FSharp.Control.Tasks.V2
 
 open System.ComponentModel.DataAnnotations
 open BoringWebApp
@@ -50,7 +49,7 @@ type AddItemRequest =
 /// Operations for listing, creating and updating Orders
 /// </summary>
 [<ApiController>]
-type OrdersController (repo: OrderRepository) =
+type OrdersController (repo: Persistence.OrderRepository) =
     inherit ControllerBase()
 
     /// <summary>
@@ -61,10 +60,10 @@ type OrdersController (repo: OrderRepository) =
     [<HttpGet("api/orders/", Name="Orders.Index")>]
     [<ProducesResponseType(200)>]
     member __.Index() : Task<ActionResult<OrderResponse[]>> =
-        repo.AllOrders()
-        |> Task.bind repo.IncludeItems
+        OrderQuery.All
+        |> OrderQuery.IncludeItems
+        |> repo.Query
         |> Task.map OrdersView.index
-
 
     /// <summary>
     /// Get an Order By ID
@@ -76,36 +75,36 @@ type OrdersController (repo: OrderRepository) =
     [<ProducesResponseType(200)>]
     member __.Show(orderId: int) : Task<ActionResult<OrderResponse>> =
         orderId
-        |> repo.FindOrderById
-        |> Task.bind repo.IncludeItems
+        |> OrderQuery.WithId
+        |> OrderQuery.IncludeItems
+        |> repo.QueryOne
         |> Task.map OrdersView.show
 
     [<HttpPost("api/orders/", Name="Orders.Create")>]
     [<ProducesResponseType(201)>]
     member this.Create([<FromBody>] request: CreateOrderRequest) : Task<ActionResult<CreateResponse>> =
         OrderService.createOrder request.Customer DateTime.UtcNow
-        |> repo.Insert
+        |> repo.SaveOrder
         |> Task.map OrdersView.created
 
     [<HttpPost("api/orders/{orderId}/items/", Name="Orders.AddItem")>]
     [<ProducesResponseType(201)>]
     member this.AddItem(request: AddItemRequest) : Task<ActionResult<CreateResponse>> =
         request.OrderId
-        |> repo.FindOrderById
-        |> Task.bind repo.IncludeItems
+        |> OrderQuery.WithId
+        |> OrderQuery.IncludeItems
+        |> repo.QueryOne
         |> Task.map (OrderService.addItem request.Product request.Quantity 13.0M)
-        |> Task.bind repo.AddItem
+        |> Task.bind repo.SaveOrderItem
         |> Task.map OrdersView.itemAdded
 
     [<HttpDelete("api/orders/{orderId}/items/{orderItemId}", Name="Orders.RemoveItem")>]
     [<ProducesResponseType(204)>]
     member __.RemoveItem(orderId: int, orderItemId: int) =
-        task {
-            let! item = repo.FindOrderItemById orderItemId
-            if item.OrderId = orderId then
-                let event = OrderService.removeItem item
-                do! repo.DeleteItem event
-                return NoContentResult() :> ActionResult
-            else
-                return NotFoundResult() :> ActionResult
-        }
+        orderId
+        |> OrderQuery.WithId
+        |> OrderQuery.IncludeItems
+        |> repo.QueryOne
+        |> Task.map (OrderService.removeItem orderItemId)
+        |> Task.bind repo.Save
+        |> Task.map (fun _ -> NoContentResult() :> ActionResult)

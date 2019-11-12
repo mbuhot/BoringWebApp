@@ -1,9 +1,12 @@
-namespace BoringWebApp.Orders
+namespace BoringWebApp.Orders.Persistence
+
 open System.Data
 open System.Data.Common
 open System.Threading.Tasks
 open BoringWebApp
+open BoringWebApp.Orders
 open BoringWebApp.Db.Operators
+open FSharp.Control.Tasks.V2
 
 /// Defines the conversions between IDataRecord and Order domain types
 module private Bindings =
@@ -27,42 +30,21 @@ module private Bindings =
             Order = None
         }
 
-
-/// Defines the DB queries for loading Order Domain types by ids or other attributes
-module private Queries =
-    let allOrders (db: DbConnection) : Order list Task =
-        Db.query "SELECT * FROM orders" [] Bindings.recordToOrder db
-
-    let findOrderById (orderId: int) (db: DbConnection) : Order Task =
-        Db.queryOne
-            "SELECT * FROM orders WHERE order_id = @OrderId"
-            (Db.parameters {|OrderId = orderId|})
-            Bindings.recordToOrder
-            db
-
-    let findOrderItemById (orderItemId: int) (db: DbConnection) : OrderItem Task =
-        Db.queryOne
-            "SELECT * FROM order_items WHERE order_item_id = @OrderItemId"
-            (Db.parameters {|OrderItemId = orderItemId|})
-            Bindings.recordToOrderItem
-            db
-
-    let findItemsForOrderIds (orderIds: int[]) (db: DbConnection): OrderItem list Task =
-        Db.query
+/// Defines functions to load related data and attach to Order domain types
+module private Relations =
+    let findItemsForOrderIds (orderIds: int[]) : OrderItem Query =
+        Query.Create(
             """
             SELECT *
             FROM order_items
             WHERE order_id = ANY(@OrderIds)
             ORDER BY order_id asc, order_item_id asc
-            """
-            (Db.parameters {|OrderIds = orderIds|})
-            Bindings.recordToOrderItem
-            db
+            """,
+            Bindings.recordToOrderItem,
+            Db.parameters {|OrderIds = orderIds|}
+        )
 
-
-/// Defines functions to load related data and attach to Order domain types
-module private Relations =
-    let includeItemsForOrders(orders: Order list) (db: DbConnection) : Order list Task =
+    let private orderItems (db: DbConnection) (orders: Order list) : Order list Task =
         let combineItemsWithOrders (items: OrderItem list) =
             query {
                 for o in orders do
@@ -70,58 +52,89 @@ module private Relations =
                 select {o with OrderItems = orderItems |> List.ofSeq |> Some}
             } |> List.ofSeq
 
-        db
-        |> Queries.findItemsForOrderIds [|for o in orders -> o.OrderId|]
+        let query = findItemsForOrderIds [|for o in orders -> o.OrderId|]
+        Db.query query.Sql query.Parameters query.Mapper db
         |> Task.map combineItemsWithOrders
 
-    let includeItemsForOrder(order: Order) (db: DbConnection): Order Task =
-        includeItemsForOrders [order] db |> Task.map (List.exactlyOne)
+    let private includeOrderRelation (db: DbConnection) (orders: Order list) = function
+        | IncludeItems _ -> orderItems db orders
+        | IncludeCustomer _ -> orders |> Task.FromResult
 
-    let includeOrder (orderItem: OrderItem) (db: DbConnection): OrderItem Task =
-        Queries.findOrderById orderItem.OrderId db
-        |> Task.map (fun x -> {orderItem with Order = Some x})
+    let includeOrderRelations (includes: OrderIncludes list) (db: DbConnection) (orders: Order list) : Order list Task =
+        Task.fold (includeOrderRelation db) orders includes
+
+
+/// Defines the DB queries for loading Order Domain types by ids or other attributes
+module OrderQuery =
+
+    let private orderFilter = function
+        | WithId p -> "(id = @OrderId)", (Db.parameters p)
+        | CreatedBetween p -> "((created_at >= @MinCreatedAt) AND (created_at <= @MaxCreatedAt))", (Db.parameters p)
+        | WithStatus p -> "(status = @Status)", (Db.parameters p)
+        | WithCustomer p -> "(customer = @Customer)", (Db.parameters p)
+
+    let private buildWhere (filters: OrderFilter list) =
+        Db.buildWhere orderFilter filters
+
+    let private orderSort =  function
+        | SortByCustomer -> "customer"
+        | SortById -> "id"
+        | SortByStatus -> "status"
+        | SortByCreatedAt -> "created_at"
+
+    let private buildOrderBy (sorts: OrderSort list) =
+        Db.buildOrderBy orderSort sorts
+
+    let toSql (query: OrderQuery) =
+        let whereClause, parameters = buildWhere query.Filters
+        let orderByClause = buildOrderBy query.Sort
+        Query.Create(
+            sprintf "SELECT * FROM orders %s %s" whereClause orderByClause,
+            Bindings.recordToOrder,
+            parameters,
+            Relations.includeOrderRelations query.Includes
+        )
 
 
 /// Exposes a facade that can be injected into a Controller
 type OrderRepository(db: DbConnection) =
 
-    // Queries
+    member this.Query(query: OrderQuery) =
+        query
+        |> OrderQuery.toSql
+        |> Query.query db
 
-    member this.AllOrders () : Order list Task =
-        db |> Queries.allOrders
+    member this.QueryOne(query: OrderQuery) =
+        query
+        |> OrderQuery.toSql
+        |> Query.queryOne db
 
-    member this.FindOrderById (orderId: int) : Order Task =
-        db |> Queries.findOrderById orderId
+    member this.Save (events: OrderEvent list) =
+        task {
+            use! txn = db.BeginTransactionAsync()
+            for e in events do
+                match e with
+                | OrderCreated x ->
+                    do! Db.insert x ignore db
 
-    member this.FindOrderItemById (orderItemId: int) : OrderItem Task =
-        db |> Queries.findOrderItemById orderItemId
+                | ItemAdded x ->
+                    do! Db.insert x ignore db
 
+                | ItemQuantityChanged x ->
+                    do! Db.updateByPrimaryKey x db
 
-    // Relations
+                | ItemRemoved x ->
+                    do! Db.deleteByPrimaryKey x db
 
-    member this.IncludeItems (orders: Order list) : Order list Task =
-        db |> Relations.includeItemsForOrders orders
+                | OrderSubmitted x ->
+                    do! Db.updateByPrimaryKey x db
 
-    member this.IncludeItems (order: Order): Order Task =
-        db |> Relations.includeItemsForOrder order
+            do! txn.CommitAsync()
+        }
 
-    member this.IncludeOrder (orderItem: OrderItem): OrderItem Task =
-        db |> Relations.includeOrder orderItem
+    member this.SaveOrder (event: OrderCreated) : int Task =
+        Db.insert event (fun x -> x?order_id) db
 
+    member this.SaveOrderItem (event: ItemAdded) : int Task =
+        Db.insert event (fun x -> x?order_item_id) db
 
-    // Mutations
-
-    member this.Insert (event: OrderCreated) : int Task =
-        db |> Db.insert event (fun r -> r?order_id)
-
-    member this.AddItem (event: ItemAdded) : int Task =
-        db |> Db.insert event (fun r -> r?order_item_id)
-
-    member this.UpdateQuantity (event: ItemQuantityChanged) =
-        db |> Db.updateByPrimaryKey event
-
-    member this.UpdateStatus (event: OrderSubmitted) =
-        db |> Db.updateByPrimaryKey event
-
-    member this.DeleteItem (event: ItemRemoved) =
-        db |> Db.deleteByPrimaryKey event

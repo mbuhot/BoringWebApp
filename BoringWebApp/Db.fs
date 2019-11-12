@@ -25,7 +25,7 @@ module Db =
         /// <remarks>
         /// If the value from the Database is null, a default value is used
         /// </remarks>
-        let (?) (self: IDataRecord) (name: string) : 'a =
+        let (?) (self: IDataRecord) (name: string): 'a =
             match self.[name] with
             | :? DBNull -> Unchecked.defaultof<'a>
             | value -> value :?> 'a
@@ -52,7 +52,7 @@ module Db =
     /// <remarks>
     /// The name of each parameter is the same as the property name, prefixed with '@'
     /// </remarks>
-    let parameters (paramRecord: 'p) : Parameters =
+    let parameters (paramRecord: 'p): Parameters =
         paramRecord
         |> properties
         |> Array.map (fun p -> "@" + p.Name, p.GetValue paramRecord) :> _
@@ -126,7 +126,7 @@ module Db =
             | n -> failwithf "Expected 1 row to be affected, got %d" n
         }
 
-    let private getTypeAttribute<'attr when 'attr :> Attribute>(o: obj) =
+    let private getTypeAttribute<'attr when 'attr :> Attribute> (o: obj) =
         match o.GetType().GetCustomAttribute(typeof<'attr>, false) with
         | null -> failwithf "Missing attribute %s on object %s" (typeof<'attr>.Name) (o.GetType().Name)
         | attr -> attr :?> 'attr
@@ -138,9 +138,6 @@ module Db =
     let private column (p: PropertyInfo) =
         p.GetCustomAttribute<ColumnAttribute>().Name
 
-    let private join (sep: string) (strings: string seq) =
-        String.Join(sep, strings)
-
     /// <summary>
     /// Convenience for inserting into a table using a parameter record annotated with <see cref="Table"/> and <see cref="Column"/> attributes
     /// </summary>
@@ -151,9 +148,9 @@ module Db =
     /// The mapped result record
     /// </returns>
     let insert (paramRecord: 'p) (mapRecord: IDataRecord -> 'a) (conn: DbConnection) =
-        let columnNames = paramRecord |> properties |> Array.map column |> join ", "
+        let columnNames = paramRecord |> properties |> Array.map column |> String.concat ", "
         let paramPairs = parameters paramRecord
-        let paramNames = Seq.map fst paramPairs |> join ", "
+        let paramNames = Seq.map fst paramPairs |> String.concat ", "
 
         let sql =
             sprintf
@@ -178,7 +175,7 @@ module Db =
         let columnAssignments =
             nonKeyProperties
             |> Array.map (fun p -> sprintf "%s = @%s" (column p) p.Name)
-            |> join ", "
+            |> String.concat ", "
 
         let sql =
             sprintf
@@ -203,3 +200,61 @@ module Db =
                 key.Name
 
         updateOne sql (parameters paramRecord) conn
+
+
+    /// <summary>
+    /// Helper for dynamically building a WHERE clause from a list of Filters
+    /// </summary>
+    let buildWhere (mkFilter: 'Filter -> (string * Parameters)) (filters: 'Filter list): string * Parameters =
+        let sqlList, paramList =
+            match filters with
+            | [] -> [ "true", [] :> Parameters ]
+            | _ -> filters |> List.map mkFilter
+            |> List.unzip
+
+        let sql = "WHERE " + System.String.Join(" AND ", sqlList)
+        let parameters = Seq.concat paramList
+        sql, parameters
+
+    /// <summary>
+    /// Helper for dynamically building an ORDER BY clause from a list of Sort values
+    /// </summary>
+    let buildOrderBy (mkSort: 'Sort -> string) (sorts: 'Sort list): string =
+        let columns = sorts |> List.map mkSort
+        "ORDER BY " + System.String.Join(", ", columns)
+
+
+
+
+type Query<'a> =
+        {
+            Sql: string
+            Parameters: Db.Parameters
+            Mapper: (IDataRecord -> 'a)
+            Include: DbConnection -> 'a list -> 'a list Task
+        }
+        static member Create(sql: string, mapper: (IDataRecord -> 'a), ?parameters: Db.Parameters, ?including: DbConnection -> 'a list -> 'a list Task) =
+            {
+                Sql = sql
+                Mapper = mapper
+                Parameters = defaultArg parameters Seq.empty
+                Include = defaultArg including (fun db results -> Task.FromResult results)
+            }
+
+ module Query =
+    let including (f: DbConnection -> 'a list -> 'a list Task) (q: Query<'a>) =
+        { q with
+            Include = (fun db xs -> q.Include db xs |> Task.bind (f db))
+        }
+
+    let map (f: 'a -> 'b) (query: Query<'a>) =
+        Query.Create(query.Sql, query.Mapper >> f, query.Parameters)
+
+    let query (db: DbConnection) (query: 'a Query) : 'a list Task =
+        Db.query query.Sql query.Parameters query.Mapper db
+        |> Task.bind (query.Include db)
+
+    let queryOne (db: DbConnection) (query: 'a Query) : 'a Task =
+        Db.query query.Sql query.Parameters query.Mapper db
+        |> Task.bind (query.Include db)
+        |> Task.map (List.exactlyOne)

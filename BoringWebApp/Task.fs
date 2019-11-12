@@ -22,3 +22,13 @@ let map (f: 'a -> 'b) (t: Task<'a>) : Task<'b> =
         let! a = t
         return f a
     }
+
+let private flip f x y = f y x
+
+let rec fold (folder: 'State -> 'T -> 'State Task) (state: 'State) (elems: 'T list): 'State Task =
+    match elems with
+    | [] -> Task.FromResult state
+    | (head :: tail) -> task {
+        let! state = folder state head
+        return! fold folder state tail
+    }

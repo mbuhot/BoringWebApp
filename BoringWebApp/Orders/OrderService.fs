@@ -22,9 +22,10 @@ let addItem (product: string) (quantity: int) (price: decimal) (order: Order) : 
     }
     event
 
-let removeItem (item: OrderItem) : ItemRemoved =
+let removeItem (itemId: int) (order: Order) : OrderEvent list =
+    let item = order.OrderItems.Value |> List.find (fun x -> x.OrderItemId = itemId)
     if item.Order.Value.Status <> "New" then failwith "Can only remove from New order"
     let event : ItemRemoved = {
         OrderItemId = item.OrderItemId
     }
-    event
+    [ItemRemoved event]

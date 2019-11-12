@@ -4,12 +4,8 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
   </PropertyGroup>
 
-  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
-    <DocumentationFile>bin\Debug\BoringWebApp.xml</DocumentationFile>
-  </PropertyGroup>
-
-  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-    <DocumentationFile>bin\Release\BoringWebApp.xml</DocumentationFile>
+  <PropertyGroup>
+    <DocumentationFile>bin\$(Configuration)\BoringWebApp.xml</DocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -39,6 +35,10 @@
     <Compile Include="Orders\OrdersController.fs" />
     <Compile Include="Startup.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <_ContentIncludedByDefault Remove="Properties\launchSettings.json" />
   </ItemGroup>
 
 </Project>

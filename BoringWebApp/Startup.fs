@@ -24,7 +24,7 @@ type Startup (configuration: IConfiguration) =
         services
             .AddScoped<DbConnection>(fun _ -> Db.createConnection configuration)
             .AddTransient<ValueRepository>()
-            .AddTransient<OrderRepository>()
+            .AddTransient<Persistence.OrderRepository>()
             .AddTransient<ValuesRouteHelpers>()
             .AddTransient<OrdersRouteHelpers>()
             .AddAuthorization()
