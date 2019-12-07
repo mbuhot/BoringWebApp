@@ -68,7 +68,7 @@ module private Relations =
 module OrderQuery =
 
     let private orderFilter = function
-        | WithId p -> "(id = @OrderId)", (Db.parameters p)
+        | WithId p -> "(order_id = @OrderId)", (Db.parameters p)
         | CreatedBetween p -> "((created_at >= @MinCreatedAt) AND (created_at <= @MaxCreatedAt))", (Db.parameters p)
         | WithStatus p -> "(status = @Status)", (Db.parameters p)
         | WithCustomer p -> "(customer = @Customer)", (Db.parameters p)

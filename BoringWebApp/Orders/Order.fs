@@ -63,6 +63,7 @@ and OrderItemIncludes =
 
 /// <summary>
 /// Specifies related data to include
+/// </summary>
 and CustomerIncludes =
     | IncludeRecentPurchases
 

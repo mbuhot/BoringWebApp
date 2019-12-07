@@ -220,10 +220,11 @@ module Db =
     /// Helper for dynamically building an ORDER BY clause from a list of Sort values
     /// </summary>
     let buildOrderBy (mkSort: 'Sort -> string) (sorts: 'Sort list): string =
-        let columns = sorts |> List.map mkSort
-        "ORDER BY " + System.String.Join(", ", columns)
-
-
+        sorts
+        |> List.map mkSort
+        |> function
+            | [] -> ""
+            | columns -> "ORDER BY " + System.String.Join(", ", columns)
 
 
 type Query<'a> =
